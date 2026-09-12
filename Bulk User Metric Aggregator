@@ -1,0 +1,417 @@
+library(shiny)
+library(DT)
+
+# =========================
+# USER INTERFACE
+# =========================
+
+ui <- fluidPage(
+  
+  # ---------- CSS DESIGN ----------
+  tags$head(
+    tags$style(HTML("
+
+      body {
+        background: linear-gradient(
+          135deg,
+          #dff6ff,
+          #fce4ec,
+          #e8f8e8
+        );
+        font-family: Arial, sans-serif;
+        color: #333333;
+      }
+
+      .title-panel {
+        background: linear-gradient(
+          90deg,
+          #6ec6ff,
+          #81d4a5,
+          #f48fb1
+        );
+        color: white;
+        padding: 25px;
+        text-align: center;
+        border-radius: 0 0 20px 20px;
+        margin-bottom: 25px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      }
+
+      .title-panel h1 {
+        font-size: 32px;
+        font-weight: bold;
+      }
+
+      .card {
+        background: rgba(255,255,255,0.90);
+        padding: 22px;
+        margin-bottom: 20px;
+        border-radius: 18px;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.12);
+      }
+
+      .metric-card {
+        background: white;
+        padding: 20px;
+        text-align: center;
+        border-radius: 18px;
+        margin-bottom: 20px;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.12);
+      }
+
+      .metric-title {
+        font-size: 17px;
+        font-weight: bold;
+        color: #607d8b;
+      }
+
+      .metric-value {
+        font-size: 30px;
+        font-weight: bold;
+        color: #1976d2;
+        margin-top: 8px;
+      }
+
+      .btn-primary {
+        background: linear-gradient(
+          90deg,
+          #64b5f6,
+          #81c784
+        );
+        border: none;
+        border-radius: 12px;
+        padding: 12px;
+        font-weight: bold;
+        width: 100%;
+        color: white;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+      }
+
+      .btn-primary:hover {
+        background: linear-gradient(
+          90deg,
+          #42a5f5,
+          #66bb6a
+        );
+        transform: scale(1.02);
+      }
+
+      .form-control {
+        border-radius: 10px;
+        border: 2px solid #b3e5fc;
+      }
+
+      h3 {
+        color: #1976d2;
+        font-weight: bold;
+      }
+
+      .section-title {
+        color: #00897b;
+        font-weight: bold;
+      }
+
+    "))
+  ),
+  
+  # ---------- TITLE ----------
+  div(
+    class = "title-panel",
+    h1("📊 Bulk User Metric Aggregator"),
+    p("Upload • Analyze • Aggregate • Visualize")
+  ),
+  
+  sidebarLayout(
+    
+    # ---------- SIDEBAR ----------
+    sidebarPanel(
+      
+      div(
+        class = "card",
+        
+        h3("📁 Upload User Data"),
+        
+        fileInput(
+          "file",
+          "Choose CSV File",
+          accept = ".csv"
+        ),
+        
+        hr(),
+        
+        h4("📈 Select Metric"),
+        
+        selectInput(
+          "metric",
+          "Choose Numeric Column:",
+          choices = NULL
+        ),
+        
+        br(),
+        
+        actionButton(
+          "calculate",
+          "✨ Calculate Metrics",
+          class = "btn-primary"
+        )
+      )
+      
+    ),
+    
+    # ---------- MAIN PANEL ----------
+    mainPanel(
+      
+      # Metric Cards
+      fluidRow(
+        
+        column(
+          4,
+          div(
+            class = "metric-card",
+            div(
+              class = "metric-title",
+              "👥 TOTAL USERS"
+            ),
+            div(
+              class = "metric-value",
+              textOutput("total")
+            )
+          )
+        ),
+        
+        column(
+          4,
+          div(
+            class = "metric-card",
+            div(
+              class = "metric-title",
+              "📊 AVERAGE"
+            ),
+            div(
+              class = "metric-value",
+              textOutput("average")
+            )
+          )
+        ),
+        
+        column(
+          4,
+          div(
+            class = "metric-card",
+            div(
+              class = "metric-title",
+              "🏆 MAXIMUM"
+            ),
+            div(
+              class = "metric-value",
+              textOutput("maximum")
+            )
+          )
+        )
+        
+      ),
+      
+      # User Data
+      div(
+        class = "card",
+        
+        h3(
+          class = "section-title",
+          "👤 Uploaded User Data"
+        ),
+        
+        DTOutput("dataTable")
+      ),
+      
+      # Summary
+      div(
+        class = "card",
+        
+        h3(
+          class = "section-title",
+          "📋 Metric Summary"
+        ),
+        
+        tableOutput("summary")
+      ),
+      
+      # Graph
+      div(
+        class = "card",
+        
+        h3(
+          class = "section-title",
+          "📈 Metric Visualization"
+        ),
+        
+        plotOutput(
+          "graph",
+          height = "350px"
+        )
+      )
+      
+    )
+  )
+)
+
+
+# =========================
+# SERVER
+# =========================
+
+server <- function(input, output, session) {
+  
+  # Read CSV
+  userData <- reactive({
+    
+    req(input$file)
+    
+    read.csv(
+      input$file$datapath,
+      stringsAsFactors = FALSE
+    )
+    
+  })
+  
+  
+  # Find numeric columns
+  observeEvent(userData(), {
+    
+    df <- userData()
+    
+    numericColumns <- names(
+      df[sapply(df, is.numeric)]
+    )
+    
+    updateSelectInput(
+      session,
+      "metric",
+      choices = numericColumns
+    )
+    
+  })
+  
+  
+  # Total Users
+  output$total <- renderText({
+    
+    req(userData())
+    
+    nrow(userData())
+    
+  })
+  
+  
+  # Average
+  output$average <- renderText({
+    
+    req(input$calculate)
+    req(input$metric)
+    
+    values <- userData()[[input$metric]]
+    
+    round(
+      mean(values, na.rm = TRUE),
+      2
+    )
+    
+  })
+  
+  
+  # Maximum
+  output$maximum <- renderText({
+    
+    req(input$calculate)
+    req(input$metric)
+    
+    values <- userData()[[input$metric]]
+    
+    round(
+      max(values, na.rm = TRUE),
+      2
+    )
+    
+  })
+  
+  
+  # Data Table
+  output$dataTable <- renderDT({
+    
+    req(userData())
+    
+    datatable(
+      userData(),
+      options = list(
+        pageLength = 5,
+        scrollX = TRUE
+      )
+    )
+    
+  })
+  
+  
+  # Summary
+  output$summary <- renderTable({
+    
+    req(input$calculate)
+    req(input$metric)
+    
+    values <- userData()[[input$metric]]
+    
+    data.frame(
+      
+      Metric = c(
+        "Total Records",
+        "Minimum",
+        "Maximum",
+        "Average",
+        "Median",
+        "Standard Deviation"
+      ),
+      
+      Value = c(
+        length(na.omit(values)),
+        round(min(values, na.rm = TRUE), 2),
+        round(max(values, na.rm = TRUE), 2),
+        round(mean(values, na.rm = TRUE), 2),
+        round(median(values, na.rm = TRUE), 2),
+        round(sd(values, na.rm = TRUE), 2)
+      )
+      
+    )
+    
+  })
+  
+  
+  # Graph
+  output$graph <- renderPlot({
+    
+    req(input$calculate)
+    req(input$metric)
+    
+    values <- userData()[[input$metric]]
+    
+    hist(
+      values,
+      main = paste(
+        "Distribution of",
+        input$metric
+      ),
+      xlab = input$metric,
+      border = "white",
+      col = "#90caf9"
+    )
+    
+  })
+  
+}
+
+
+# =========================
+# RUN APP
+# =========================
+
+shinyApp(
+  ui = ui,
+  server = server
+)
